@@ -31,7 +31,8 @@ struct Slab {
 	}
 //	Bucket * bucket;
 
-	Slab * nextSlab;
+	Slab * nextpointer;
+	Object * start_obj;
 
 };
 
@@ -39,6 +40,7 @@ struct Slab {
 struct Object {
 	Slab * parentSlab;
 	void * memory;
+	Object * nextpointer;
 
 };
 
@@ -59,3 +61,21 @@ void * allococate_slab_chunk(){
 int deallocate_slab_chunk(void* p){
 	return munmap(p,SLAB_SIZE);
 }
+
+template <typename nodepointer>
+int insert(nodepointer a , nodepointer b){
+	if(a == nullptr){
+		//allocate space to b
+		a = b;
+		return 0;
+	}
+	else{
+		nodepointer temp = a;
+		while(temp->nextpointer == nullptr)temp = temp->nextpointer;
+		//allocate space to b
+		temp = b;
+		return 0;
+	}
+	return 1;
+}
+
