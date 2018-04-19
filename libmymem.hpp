@@ -1,8 +1,9 @@
 #include <iostream>
 #include <sys/mman.h>
+#define SLAB_SIZE (64*1024)
 #define N 12
-#define X 
-enum BucketSize{  // Enum for indexing into the correct size 
+#define X
+enum BucketSize{  // Enum for indexing into the correct size
 	B4,
 	B8,
 	B16,
@@ -19,7 +20,7 @@ enum BucketSize{  // Enum for indexing into the correct size
 };
 
 
-struct Slab {       
+struct Slab {
 
 	int totalObj;
 	int freeObj;
@@ -38,7 +39,7 @@ struct Slab {
 struct Object {
 	Slab * parentSlab;
 	void * memory;
-	
+
 };
 
 struct Bucket {
@@ -47,8 +48,14 @@ struct Bucket {
 };
 
 
-Bucket Table[N];		// Table of type bucket 
+Bucket Table[N];		// Table of type bucket
 
 void myfree(void *ptr);
 void* mymalloc(unsigned size);
 
+void * allococate_slab_chunk(){
+	return mmap(NULL, SLAB_SIZE, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+}
+int deallocate_slab_chunk(void* p){
+	return munmap(p,SLAB_SIZE);
+}
