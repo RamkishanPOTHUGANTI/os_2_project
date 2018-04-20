@@ -79,7 +79,7 @@ Slab* insert_slab_in_bucket(Slab * first_slab_in_bucket,int bucket_size){
 			return nullptr;
 		}
 		slab_ = (Slab*)tempptr;  //use some dynmaci cast or static cast
-
+		intialise_slab(slab_,bucketSize);
 		first_slab_in_bucket = slab_;
 		return first_slab_in_bucket;
 	}
@@ -92,6 +92,7 @@ Slab* insert_slab_in_bucket(Slab * first_slab_in_bucket,int bucket_size){
 	  slab_ = (Slab*)tempptr;  //use some dynmaci cast or static cast
 		Slab * temp = first_slab_in_bucket;
 		while(temp->nextpointer == nullptr)temp = temp->nextpointer;
+		intialise_slab(slab_,bucketSize);
 		temp->nextpointer = slab_;
 		return temp->nextpointer;
 	}
