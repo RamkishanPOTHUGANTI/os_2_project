@@ -33,18 +33,13 @@ struct Slab {
 	bool bitmap[4096]; //4096 bytes
 	void * bucket = NULL;
 	Slab * nextpointer;
+	Object * first_Object;
 };
 struct Bucket {
 	size_t bucketSize;
 	Slab * slab;
 };
-void intialise_slab(Slab * s , int bs){
-	s->bucketSize = bs;
-	int used_space = 10;
-	s->totalObj = (64*1024 - B)/sizeof(Object);
-	s->freeObj = s->totalObj;
-	update_parent_bucket_in_Slab(s,&Bucket[bs]); 
-}
+
 void update_parent_slab_in_Object(Slab * s , Object * o){
 	o->parentSlab = (void *)s;
 }
@@ -69,32 +64,50 @@ void * allococate_slab_chunk(){
 int deallocate_slab_chunk(void* p){
 	return munmap(p,SLAB_SIZE);
 }
-
-
-Slab* insert_slab_in_bucket(Slab * first_slab_in_bucket,int bucket_size){
-	if(first_slab_in_bucket == NULL){
-		Slab * slab_ ;
-		void * tempptr = allococate_slab_chunk();
-		if(tempptr == MAP_FAILED){
-			return nullptr;
+void intialise_bucket(int i){
+	Table[i].bucketSize = BucketSize[i]; //use correct syntax for enumerator
+	Table[i].slab = nullptr;
+}
+void intialise_Object(Object * o , int i){
+	memory = (void*)o + size_of(o->parentSlab);
+	o->nextpointer = o + BucketSize[i];
+}
+Slab * intialise_slab(void * ptr , int i){
+		Slab * return_value = (Slab *)ptr;
+		update_parent_bucket_in_Slab(return_value,i);
+		return_value->first_Object = &return_value->first_Object + size_of(return_value->first_Object);
+		Object * temp = return_value->first_obect;
+		while(ptr + 64KB > size_of(Object) + temp){
+			intialise_Object(temp,i);
+			update_parent_slab_in_Object(return_value,temp);
+			temp = temp + size_of(Object);
 		}
-		slab_ = (Slab*)tempptr;  //use some dynmaci cast or static cast
-		intialise_slab(slab_,bucketSize);
-		first_slab_in_bucket = slab_;
-		return first_slab_in_bucket;
+		return return_value;
+}
+Slab * create_slab(int i){
+	if(Table[i].slab == nullptr){
+		void * temp = allococate_slab_chunk();
+		if(temp == MAP_FAILED)return nullptr;
+		Slab* s = intialise_slab(temp,i);
+		Table[i].slab = s;
+		return s;
 	}
 	else{
-	  Slab * slab_ ;
-	  void * tempptr = allococate_slab_chunk();
-	  if(tempptr == MAP_FAILED){
-		     return nullptr;
-	  }
-	  slab_ = (Slab*)tempptr;  //use some dynmaci cast or static cast
-		Slab * temp = first_slab_in_bucket;
-		while(temp->nextpointer == nullptr)temp = temp->nextpointer;
-		intialise_slab(slab_,bucketSize);
-		temp->nextpointer = slab_;
-		return temp->nextpointer;
+		Slab * tempp = Table[i].slab;
+		while(tempp->nextpointer == nullptr)tempp = tempp->nextpointer;
+		void * temp = allococate_slab_chunk();
+		if(temp == MAP_FAILED)return nullptr;
+		Slab* s = intialise_slab(temp,i);
+		 tempp->nextpointer= s;
+		return s;
 	}
-	return nullptr;
+}
+int intialise_all_Buckets(){
+	int error = 0;
+	for(int i = 0 ; i < N ; i++){
+		intialise_bucket(i);
+		if(create_slab(i) == nullptr)error =1;
+		//intialise_slab(i);
+	}
+	return error;
 }
