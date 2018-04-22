@@ -1,8 +1,9 @@
 #include <iostream>
 #include <sys/mman.h>
+#define SLAB_SIZE (64*1024)
 #define N 12
-#define X 
-enum BucketSize{  // Enum for indexing into the correct size 
+#define X
+enum BucketSize{  // Enum for indexing into the correct size
 	B4,
 	B8,
 	B16,
@@ -19,36 +20,94 @@ enum BucketSize{  // Enum for indexing into the correct size
 };
 
 
-struct Slab {       
-
-	int totalObj;
-	int freeObj;
-	bool bitmap[4096];
-	int initialize(){
-		totalObj=0;
-		freeObj=0;
-	}
-//	Bucket * bucket;
-
-	Slab * nextSlab;
-
-};
-
-
 struct Object {
-	Slab * parentSlab;
-	void * memory;
-	
+	void* parentSlab = NULL;
+	void * memory = NULL;
+	Object * nextpointer;
 };
 
+struct Slab {
+	int totalObj = 0 ; //4 bytes
+	int freeObj = 0; //4 bytes
+	int BucketSize = 0; //4 bytes
+	bool bitmap[4096]; //4096 bytes
+	void * bucket = NULL;
+	Slab * nextpointer;
+	Object * first_Object;
+};
 struct Bucket {
 	size_t bucketSize;
 	Slab * slab;
 };
 
+void update_parent_slab_in_Object(Slab * s , Object * o){
+	o->parentSlab = (void *)s;
+}
+Slab * get_parent_slab_address(Object* o){
+	return (Slab *)(o->parentSlab);
+}
+void update_parent_bucket_in_Slab(Bucket * b , Slab * s){
+	s->bucket = (void *)b;
+}
+Bucket * get_parent_bucket_address(Slab* s){
+	return (Bucket *)(s->bucket);
+}
 
-Bucket Table[N];		// Table of type bucket 
+Bucket Table[N];		// Table of type bucket
 
 void myfree(void *ptr);
 void* mymalloc(unsigned size);
 
+void * allococate_slab_chunk(){
+	return mmap(NULL, SLAB_SIZE, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+}
+int deallocate_slab_chunk(void* p){
+	return munmap(p,SLAB_SIZE);
+}
+void intialise_bucket(int i){
+	Table[i].bucketSize = BucketSize[i]; //use correct syntax for enumerator
+	Table[i].slab = nullptr;
+}
+void intialise_Object(Object * o , int i){
+	memory = (void*)o + size_of(o->parentSlab);
+	o->nextpointer = o + BucketSize[i];
+}
+Slab * intialise_slab(void * ptr , int i){
+		Slab * return_value = (Slab *)ptr;
+		update_parent_bucket_in_Slab(return_value,i);
+		return_value->first_Object = &return_value->first_Object + size_of(return_value->first_Object);
+		Object * temp = return_value->first_obect;
+		while(ptr + 64KB > size_of(Object) + temp){
+			intialise_Object(temp,i);
+			update_parent_slab_in_Object(return_value,temp);
+			temp = temp + size_of(Object);
+		}
+		return return_value;
+}
+Slab * create_slab(int i){
+	if(Table[i].slab == nullptr){
+		void * temp = allococate_slab_chunk();
+		if(temp == MAP_FAILED)return nullptr;
+		Slab* s = intialise_slab(temp,i);
+		Table[i].slab = s;
+		return s;
+	}
+	else{
+		Slab * tempp = Table[i].slab;
+		while(tempp->nextpointer == nullptr)tempp = tempp->nextpointer;
+		void * temp = allococate_slab_chunk();
+		if(temp == MAP_FAILED)return nullptr;
+		Slab* s = intialise_slab(temp,i);
+		 tempp->nextpointer= s;
+		return s;
+	}
+}
+int intialise_all_Buckets(){
+	int error = 0;
+	for(int i = 0 ; i < N ; i++){
+		intialise_bucket(i);
+		if(create_slab(i) == nullptr)error =1;
+		//intialise_slab(i);
+	}
+	return error;
+}
