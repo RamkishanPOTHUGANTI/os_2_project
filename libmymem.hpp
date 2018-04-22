@@ -21,9 +21,11 @@ enum BucketSize{  // Enum for indexing into the correct size
 
 
 struct Object {
+
 	void* parentSlab = NULL;
 	void * memory = NULL;
-	Object * nextpointer;
+	Object * nextPointer;
+
 };
 
 struct Slab {
@@ -63,17 +65,44 @@ void * allocate_slab_chunk(){
 }
 
 int deallocate_slab_chunk(void* p){
+
 	return munmap(p,SLAB_SIZE);
+
 }
 
 int initializeSlab(Slab * s,Bucket b){
+
 	// Function should allocate space for the objects
-	s->totalObj = ((64*1024) -sizeof(struct slab)) /b.bucketSize 
+	
 	s->bucket = (void *) &b;
 	s->bucketSize = b.bucketSize;
 	s->nextSlab = NULL;
 
 	// Have to allocate space for the objects
+	int count = 0;
+	int numObjects = ((64*1024) - (sizeof(struct Slab)))/ (sizeof(struct Object) + b.bucketSizex);
+	s->totalObj = numObjects;
+	s->freeObj = s->totalObj;
+	for (int i=0;i<numObjects;i++){
+		s->bitmap[i]=1;
+	}
+
+	s->objPtr = (Object *) (sizeof(struct Slab) + s);
+	s->objPtr->nextPointer = NULL;
+	s->objPtr->memory = (void *) (sizeof(Object) + s->objPtr)	;
+	s->objPtr->parentSlab = s;
+	count ++;
+	Object * temp = s->objPtr;
+
+	while (count<=numObjects){
+		temp->nextPointer = temp + sizeof(Object) + b.bucketSize;
+		temp = temp->nextPointer;
+		temp->memory= (void *) (sizeof(Object) + temp);
+		temp->parentSlab= s;
+		count++;
+	}	
+
+	return 0;
 
 }
 
@@ -86,16 +115,16 @@ int initialize_bucket(int i){
 
 	return 0;
 }
-int initialize_Object(Object * o , int i){
+/*int initialize_Object(Object * o , int i){
 
-	memory = (void*)o + size_of(o->parentSlab);
-	o->nextpointer = o + BucketSize[i];
-	return 0;
+	//memory = (void*)o + size_of(o->parentSlab);
+	//o->nextPointer = o + BucketSize[i];
+	//return 0;
 }
-
-Slab * create_slab(Slab * sl,Bucket b){
+*/
+Slab * createSlab(Slab * sl,Bucket b){
 	// Function to create new slab
-	Slab * newSlab = allocate_slab_chunk();
+	Slab * newSlab =(Slab *) allocate_slab_chunk();
 	initializeSlab(newSlab,b);
 	sl->nextSlab = newSlab;
 	return newSlab;
