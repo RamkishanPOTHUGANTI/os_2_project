@@ -6,6 +6,7 @@ void * searchInBucket(int bucketIndex){
 	Slab * currentSlab;
 
 	currentSlab = Table[bucketIndex].slab;
+  if (currentSlab == NULL) initialize_bucket(bucketIndex);
 	while (currentSlab->nextSlab!=NULL && currentSlab->freeObj==0){
 		currentSlab = currentSlab -> nextSlab;
 	}
@@ -20,7 +21,7 @@ void * searchInBucket(int bucketIndex){
 		return obj->memory;
 	}
 	else{
-		
+
 		int position=0,count=0;
 		// search in bitmap update position;
 		position = firstZeroBitmap(currentSlab->bitmap);
@@ -32,7 +33,7 @@ void * searchInBucket(int bucketIndex){
 			obj = obj->nextPointer;
 			count++;
 		}
-		
+
 		return obj->memory;
 
 
@@ -40,7 +41,7 @@ void * searchInBucket(int bucketIndex){
 
 
 
-	
+
 
 }
 
@@ -52,7 +53,7 @@ void * mymalloc(unsigned size){
 		int diff = abs(size - Table[i].bucketSize);
 		if (diff < min){
 			min = diff;
-			bucketIndex=i; 
+			bucketIndex=i;
 		}
 	}
 
@@ -72,7 +73,7 @@ void myfree(void * ptr){
     temp = p->objPtr;
     int position = 0 ;
     while(temp != o){
-    
+
     	temp = temp->nextPointer;
     	position++;
     }
@@ -81,5 +82,5 @@ void myfree(void * ptr){
     ptr = NULL;
     return ;
 
-	
+
 }
