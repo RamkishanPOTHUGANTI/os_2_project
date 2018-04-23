@@ -15,7 +15,7 @@ THEN RUN FOLLOWING COMMANDS i.e TO MAKE LIBRARY
 _____________________________________________________________________
 TO MAKE LIBRARY
 _____________________________________________________________________
-$ g++ -Wall -Werror -fpic -c libmymem.o -I . libmymem.cpp
+$ g++ -Wall -Werror -fpic -c -o libmymem.o -I . libmymem.cpp
 $ g++ -shared -o libmymem.so libmymem.o
 
 ______________________________________________________________________
@@ -28,7 +28,7 @@ ______________________________________________________________________
 TO RUN A MULTITHREADED  PROGRAM
 ______________________________________________________________________
 $export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
-$g++ -I . -L . -Wall -o memutil memutil.cpp -l mymem
+$g++ -I . -L . -Wall -o memutil memutil.cpp -l mymem -l pthread
 $mmemutil -n 100 -t 12
 
 /****      ENSURE YOU MADE LIBRARY BEFORE  EXECUTING MEMUTIL   ****/
