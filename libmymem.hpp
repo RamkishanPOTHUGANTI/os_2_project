@@ -1,63 +1,94 @@
-#include <iostream>
-#include <cstdlib>
-#include <string.h>
+#include <iostream>		
 #include <sys/mman.h>
-
+#include <mutex>
+#include <condition_variable>
 #define SLAB_SIZE (64*1024)
 #define N 12
-#define X
-enum BucketSize{  // Enum for indexing into the correct size
-	B4,
-	B8,
-	B16,
-	B32,
-	B64,
-	B128,
-	B256,
-	B512,
-	B1024,
-	B2048,
-	B4096,
-	B8192,
-	LAST
+
+/* Thread safety is achieved by using semaphores at Bucket level granularity */
+
+class Semaphore {
+	/* Class for semaphore */
+public:
+	Semaphore();
+	Semaphore(int); // constructor taking the int value indicating the number of shared resources
+	void waiting();  // used for decrementing the count variable using locks
+	void signal();	// used for incrementing the count variable using locks
+
+private:
+	std::mutex mutex;  // standard mutex for the
+	int count;			// indicating the number of shared resources
+	std::condition_variable cv; // condition variable
+
 };
+Semaphore::Semaphore(){
+	count = 1;
+}
+Semaphore::Semaphore(int n) {
+	count = n;
+}
+void Semaphore::waiting() {
+	std::unique_lock<std::mutex> lock(mutex);
+	while (count == 0) {
+		cv.wait(lock);
+	}
+	count--;
 
+}
+void Semaphore::signal() {
+	std::unique_lock<std::mutex> lock(mutex);
+	count++;
+	cv.notify_one();
 
-struct Object {
+}
+
+struct Object {  // Structure for objects
 
 	void* parentSlab = NULL;
 	void * memory = NULL;
-	Object * nextPointer;
+	Object * nextPointer;	// Object pointing to next object in the linked list
 
 };
 
-struct Slab {
+struct Slab {	
 
-	int totalObj = 0 ; //4 bytes
-	int freeObj = 0; //4 bytes
-	size_t bucketSize = 0; //4 bytes
-	std::string bitmap;
+	int totalObj = 0 ; 
+	int freeObj = 0; 
+	size_t bucketSize = 0; // to get the bucket size
+	std::string bitmap;		// Storing which 0 if objects are free and 1 if objects are empty
 	void * bucket = NULL;
 	Slab * nextSlab;
-	Object * objPtr;
+	Object * objPtr;	
+	int bucketIndex=0;
 
 };
 struct Bucket {
-	size_t bucketSize;
-	Slab * slab=NULL;
-};
 
-int firstZeroBitmap(std::string s){
+	size_t bucketSize;
+	int index;		// storing the bucket size
+	Slab * slab = NULL;
+//	Semaphore bucketMutex;
+			// storing the pointer to slab
+};
+Semaphore BucketSemaphore[N]{{1},{1},{1},{1},{1},{1},{1},{1},{1},{1},{1},{1}}; //array of semaphores used for thread safety
+// Functions defined in libmymem.cpp
+int initializeSlab(Slab * ,Bucket);
+void* searchInBucket(int );
+void myfree(void *ptr);
+void* mymalloc(unsigned size);
+
+int firstZeroBitmap(std::string s){ 
+	// Searches for the first occurrance of 0 in bitmap i.e returns the position of free object
     int n = s.length();
     for(int i = 0;i<n;i++){
-
+    
     	if (s[i]=='0') return i;
     }
     return -1;
 }
 
 std::string make_n_length_string(int n){
-
+	// Function used to make n length bitmap representing the free/empty objects
 	std::string s = "";
 	for (int i = 0; i < n; i++) {
 		s = s + "0";
@@ -67,6 +98,7 @@ std::string make_n_length_string(int n){
 }
 
 void change_char_at(int pos , std::string * a ,std::string b){
+	// Used to change the bitmap value of string a at position pos with character b
 	a->replace(pos,1,b);
 	return ;
 }
@@ -86,88 +118,31 @@ Bucket * get_parent_bucket_address(Slab* s){
 	return (Bucket *)(s->bucket);
 }
 
-Bucket Table[N]={
-	{4,NULL},{8,NULL},{16,NULL},{32,NULL},{64,NULL},{128,NULL},{256,NULL},{512,NULL},{1024,NULL},{2048,NULL},
-	{4096,NULL},{8192,NULL}
-};		// Table of type bucket
+Bucket Table[N]={ {4,0,NULL},{8,1,NULL},{16,2,NULL},{32,3,NULL},{64,4,NULL},{128,5,NULL},{256,6,NULL},{512,7,NULL},{1024,8,NULL},{2048,9,NULL},{4096,10,NULL},{8192,11,NULL}};
+		// Table of type bucket
 
-void myfree(void *ptr);
-void* mymalloc(unsigned size);
 
 void * allocate_slab_chunk(){
+	// Used to allocate the 64 KB of slab
 	return mmap(NULL, SLAB_SIZE, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 }
 
 int deallocate_slab_chunk(void* p){
-
+	// Used to deallocate the slab
 	return munmap(p,SLAB_SIZE);
 
 }
 
-int initializeSlab(Slab * s,Bucket b){
-
-	// Function should allocate space for the objects
-
-	s->bucket = (void *) &b;
-	s->bucketSize = b.bucketSize;
-	s->nextSlab = NULL;
-
-	// Have to allocate space for the objects
-	int count = 0;
-	int numObjects = (SLAB_SIZE - (sizeof(struct Slab)))/ (sizeof(struct Object) + b.bucketSize);
-	printf("%d %d %d numObjects =%d\n",b.bucketSize,sizeof(struct Object),sizeof(struct Slab),numObjects);
-	s->totalObj = numObjects;
-	s->freeObj = s->totalObj;
-	s->bitmap = make_n_length_string(s->totalObj);
-
-	s->objPtr = (Object *) &s[sizeof(Slab)];
-	s->objPtr->nextPointer = NULL;
-
-	s->objPtr->memory = (void *) &s->objPtr[sizeof(Object)];
-	s->objPtr->parentSlab = s;
-	count ++;
-	Object * temp = s->objPtr;
-	printf("%p\n",s[64*1024]);
-	printf("slab %p obj %p memor %p next %p \n",s,s->objPtr,s->objPtr->memory,s->objPtr->memory + s->bucketSize);
-	while (count < numObjects){
-		printf("%p\n",temp);
-		temp->nextPointer =(Object *) (temp ->memory + b.bucketSize);
-		printf("%p\n",temp->nextPointer);
-		temp = temp->nextPointer;
-		printf("%p\n",temp);
-		if (temp==NULL){
-			printf("usNULL");
-			return 0;
-		}
-		temp->memory= (void *) &temp[sizeof(Object)];
-		temp->parentSlab=s;
-		printf("%d \n",count);//,temp->memory,temp->parentSlab);
-		count++;
-
-	}
-	temp->nextPointer=NULL;
-
-
-	return 0;
-
-}
 
 int initialize_bucket(int i){
-//	Table[i].bucketSize = (2^(i+2)); //use correct syntax for enumerator
 	Table[i].slab =(Slab *) allocate_slab_chunk();
 	printf("allocated slab\n");
 	// Initializing the slabs have to allocate space to the objects
-	initializeSlab(Table[i].slab,Table[i]);
-	printf("initialized slab\n");
+	initializeSlab(Table[i].slab,Table[i]);	
+	printf("initializedSlab\n");
 	return 0;
 }
-/*int initialize_Object(Object * o , int i){
 
-	//memory = (void*)o + size_of(o->parentSlab);
-	//o->nextPointer = o + BucketSize[i];
-	//return 0;
-}
-*/
 Slab * createSlab(Slab * sl,Bucket b){
 	// Function to create new slab
 	Slab * newSlab =(Slab *) allocate_slab_chunk();
@@ -178,103 +153,11 @@ Slab * createSlab(Slab * sl,Bucket b){
 
 
 int initialize_all_Buckets(int index){
-
-
+	
+	
 		initialize_bucket(index);
 
+	
 
 	return 0;
-}
-//----------------------
-void * searchInBucket(int bucketIndex){
-
-	Slab * currentSlab;
-
-	currentSlab = Table[bucketIndex].slab;
-  if (currentSlab == NULL) {
-		printf("Initializing\n");
-		initialize_bucket(bucketIndex);
-
-	}
-	currentSlab = Table[bucketIndex].slab;
-	if (currentSlab==NULL){
-		printf("isNULL\n");
-	}
-	while (currentSlab->nextSlab!=NULL && currentSlab->freeObj==0){
-		currentSlab = currentSlab -> nextSlab;
-	}
-	if (currentSlab -> freeObj == 0){
-		currentSlab = createSlab(currentSlab,Table[bucketIndex]);
-		Object * obj = currentSlab -> objPtr;
-		currentSlab->freeObj--;
-		// Change the bitmap value
-		int position = 0;
-		change_char_at(position,&currentSlab->bitmap,"1");
-
-		return obj->memory;
-	}
-	else{
-
-		int position=0,count=0;
-		// search in bitmap update position;
-		position = firstZeroBitmap(currentSlab->bitmap);
-
-		Object * obj = currentSlab->objPtr;
-
-		while (count<position){
-
-			obj = obj->nextPointer;
-			count++;
-		}
-
-		return obj->memory;
-
-
-	}
-
-
-
-
-
-}
-
-void * mymalloc(unsigned size){
-
-	int min=1000;
-	int bucketIndex=-1;
-	for (int i=0 ; i<12;i++){
-		int diff = abs(size - Table[i].bucketSize);
-
-		if (diff < min){
-			min = diff;
-			bucketIndex=i;
-		}
-	}
-	printf("%d : size , bucket %d\n",size,bucketIndex);
-	void * memory = searchInBucket(bucketIndex);
-
-	return memory;
-}
-
-
-
-void myfree(void * ptr){
-
-	if (ptr==NULL) return;
-	Object * o = (Object*)ptr - sizeof(Object);
-	Object *temp;
-    Slab * p = get_parent_slab_address(o);
-    temp = p->objPtr;
-    int position = 0 ;
-    while(temp != o){
-
-    	temp = temp->nextPointer;
-    	position++;
-    }
-    p->freeObj++;
-    change_char_at(position,&p->bitmap,"0");
-    ptr = NULL;
-    return ;
-
-
 }
