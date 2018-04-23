@@ -1,0 +1,5 @@
+g++ -Wall -Werror -fpic -c -o libmymem.o -I . libmymem.cpp
+g++ -shared -o libmymem.so libmymem.o
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
+g++ -I . -L . -Wall -o memutil memutil.cpp -l mymem  
+
